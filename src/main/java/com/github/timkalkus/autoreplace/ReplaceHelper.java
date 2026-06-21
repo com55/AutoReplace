@@ -17,6 +17,24 @@ public class ReplaceHelper {
     private int shulkerBoxLocation = -1;
     private int replacementItemSlot = -1;
 
+    // Inventory slots in search-priority order: hotbar (0-8), off-hand (40), then the main inventory (9-35).
+    // Armor slots (36-39) are intentionally not searched as a replacement source.
+    private static final int OFF_HAND_SLOT = 40;
+    private static final int[] SEARCH_ORDER = buildSearchOrder();
+
+    private static int[] buildSearchOrder() {
+        int[] order = new int[37];
+        int idx = 0;
+        for (int slot = 0; slot <= 8; slot++) {   // hotbar
+            order[idx++] = slot;
+        }
+        order[idx++] = OFF_HAND_SLOT;             // off-hand
+        for (int slot = 9; slot <= 35; slot++) {  // main inventory
+            order[idx++] = slot;
+        }
+        return order;
+    }
+
     public ReplaceHelper(Player player, ItemStack item, int itemSlot) {
         this.player = player;
         this.inventory = player.getInventory();
@@ -77,30 +95,32 @@ public class ReplaceHelper {
     }
 
     private void findReplacement() {
-        // Searches inventory for first possible replacement
+        // Searches the inventory for the first possible replacement following SEARCH_ORDER
+        // (hotbar, off-hand, main inventory): first the loose items, then inside shulker boxes.
         ItemStack[] invContent = inventory.getContents();
-        // Search first in the actual inventory
-        for (int i = 0; i < invContent.length; i++) {
-            if (itemSlot != null && i == itemSlot) {
+        // 1. loose items in the inventory
+        for (int slot : SEARCH_ORDER) {
+            if (slot >= invContent.length || (itemSlot != null && slot == itemSlot)) {
                 continue;
             }
-            if (isPossibleReplacement(invContent[i])) {
-                this.replacementItemSlot = i;
+            if (isPossibleReplacement(invContent[slot])) {
+                this.replacementItemSlot = slot;
                 return;
             }
         }
-        // then in shulker boxes
-        for (int i = 0; i < invContent.length; i++) {
-            if (isShulker(invContent[i])) {
-                ShulkerBoxHelper sbh = new ShulkerBoxHelper(invContent[i]);
-                ItemStack[] sbContent = sbh.getInventory().getContents();
-                for (int j = 0; j < sbContent.length; j++) {
-                    if (isPossibleReplacement(sbContent[j])) {
-                        this.shulkerBox = sbh;
-                        this.shulkerBoxLocation = i;
-                        this.replacementItemSlot = j;
-                        return;
-                    }
+        // 2. items inside shulker boxes, in the same location priority
+        for (int slot : SEARCH_ORDER) {
+            if (slot >= invContent.length || !isShulker(invContent[slot])) {
+                continue;
+            }
+            ShulkerBoxHelper sbh = new ShulkerBoxHelper(invContent[slot]);
+            ItemStack[] sbContent = sbh.getInventory().getContents();
+            for (int j = 0; j < sbContent.length; j++) {
+                if (isPossibleReplacement(sbContent[j])) {
+                    this.shulkerBox = sbh;
+                    this.shulkerBoxLocation = slot;
+                    this.replacementItemSlot = j;
+                    return;
                 }
             }
         }

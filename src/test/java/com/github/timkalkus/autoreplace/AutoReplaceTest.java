@@ -267,6 +267,51 @@ public class AutoReplaceTest {
         assertFalse(AutoReplaceListener.isNullOrAir(player.getInventory().getItem(0)), "held stack should be refilled from the shulker box in the off-hand");
     }
 
+    /**
+     * Checks that the off-hand is preferred over the main inventory for loose replacements
+     */
+    @Test
+    public void refillPrefersOffHandOverInventory() {
+        Player player = server.addPlayer();
+        // held single stack that will be depleted
+        ItemStack held = new ItemStack(Material.STONE, 1);
+        player.getInventory().setItem(0, held);
+        held = player.getInventory().getItem(0);
+        assertNotNull(held);
+        // replacement available both in the main inventory and in the off-hand
+        player.getInventory().setItem(9, new ItemStack(Material.STONE, 64));
+        player.getInventory().setItemInOffHand(new ItemStack(Material.STONE, 64));
+        // execute event
+        executeItemUsedEvent(player, held);
+        // off-hand has priority, so it should be consumed and the main inventory left untouched
+        assertFalse(AutoReplaceListener.isNullOrAir(player.getInventory().getItem(0)), "held stack should be refilled");
+        assertTrue(AutoReplaceListener.isNullOrAir(player.getInventory().getItemInOffHand()), "off-hand should be consumed before the main inventory");
+        assertNotNull(player.getInventory().getItem(9));
+        assertEquals(64, player.getInventory().getItem(9).getAmount(), "main inventory replacement should be untouched");
+    }
+
+    /**
+     * Checks that a shulker box in the off-hand is preferred over a shulker box in the main inventory
+     */
+    @Test
+    public void refillPrefersOffHandShulkerOverInventoryShulker() {
+        Player player = server.addPlayer();
+        // held single stack that will be depleted
+        ItemStack held = new ItemStack(Material.STONE, 1);
+        player.getInventory().setItem(0, held);
+        held = player.getInventory().getItem(0);
+        assertNotNull(held);
+        // a matching shulker box both in the main inventory and in the off-hand
+        player.getInventory().setItem(9, shulkerContaining(new ItemStack(Material.STONE, 64)));
+        player.getInventory().setItemInOffHand(shulkerContaining(new ItemStack(Material.STONE, 64)));
+        // execute event
+        executeItemUsedEvent(player, held);
+        // off-hand shulker has priority, so it should be drained and the main inventory shulker left untouched
+        assertFalse(AutoReplaceListener.isNullOrAir(player.getInventory().getItem(0)), "held stack should be refilled");
+        assertEquals(0, amountInShulker(player.getInventory().getItemInOffHand(), Material.STONE), "off-hand shulker should be drained before the main inventory shulker");
+        assertEquals(64, amountInShulker(player.getInventory().getItem(9), Material.STONE), "main inventory shulker should be untouched");
+    }
+
     @Test
     public void stressTest() {
         int numberOfPlayers = 20;
