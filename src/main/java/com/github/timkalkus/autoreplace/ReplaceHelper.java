@@ -79,7 +79,17 @@ public class ReplaceHelper {
     private void findReplacement() {
         // Searches inventory for first possible replacement
         ItemStack[] invContent = inventory.getContents();
-        // Search first in shulker boxes
+        // Search first in the actual inventory
+        for (int i = 0; i < invContent.length; i++) {
+            if (itemSlot != null && i == itemSlot) {
+                continue;
+            }
+            if (isPossibleReplacement(invContent[i])) {
+                this.replacementItemSlot = i;
+                return;
+            }
+        }
+        // then in shulker boxes
         for (int i = 0; i < invContent.length; i++) {
             if (isShulker(invContent[i])) {
                 ShulkerBoxHelper sbh = new ShulkerBoxHelper(invContent[i]);
@@ -92,16 +102,6 @@ public class ReplaceHelper {
                         return;
                     }
                 }
-            }
-        }
-        // then in actual inventory
-        for (int i = 0; i < invContent.length; i++) {
-            if (itemSlot != null && i == itemSlot) {
-                continue;
-            }
-            if (isPossibleReplacement(invContent[i])) {
-                this.replacementItemSlot = i;
-                return;
             }
         }
     }

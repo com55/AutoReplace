@@ -6,6 +6,7 @@ import com.diogonunes.jcolor.Ansi;
 import com.diogonunes.jcolor.Attribute;
 import org.bukkit.Material;
 import org.bukkit.block.BlockFace;
+import org.bukkit.block.ShulkerBox;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Event;
@@ -14,6 +15,7 @@ import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerItemDamageEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.BlockStateMeta;
 import org.bukkit.inventory.meta.Damageable;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.junit.jupiter.api.AfterEach;
@@ -201,6 +203,68 @@ public class AutoReplaceTest {
         // check if item was moved
         assertFalse(AutoReplaceListener.isNullOrAir(player.getInventory().getItem(0)), "Stack is empty, but should be refilled");
         assertEquals(itemCount - 1, amountInInventory(player.getInventory(), Material.STONE));
+    }
+
+    /**
+     * Checks that a depleted stack is refilled from the plain inventory first and only falls back to a
+     * shulker box when the inventory has no replacement (regression test for shulker-before-inventory order)
+     */
+    @Test
+    public void refillFromInventoryBeforeShulker() {
+        Player player = server.addPlayer();
+        // held single stack that will be depleted
+        ItemStack held = new ItemStack(Material.STONE, 1);
+        player.getInventory().setItem(0, held);
+        held = player.getInventory().getItem(0);
+        assertNotNull(held);
+        // a full replacement stack directly in the inventory
+        player.getInventory().setItem(1, new ItemStack(Material.STONE, 64));
+        // another full replacement stack inside a shulker box
+        player.getInventory().setItem(2, shulkerContaining(new ItemStack(Material.STONE, 64)));
+        // execute event
+        executeItemUsedEvent(player, held);
+        // refill must come from the plain inventory stack, leaving the shulker box untouched
+        assertFalse(AutoReplaceListener.isNullOrAir(player.getInventory().getItem(0)), "held stack should be refilled");
+        assertTrue(AutoReplaceListener.isNullOrAir(player.getInventory().getItem(1)), "inventory replacement should have been consumed first");
+        assertEquals(64, amountInShulker(player.getInventory().getItem(2), Material.STONE), "shulker box should be untouched when inventory has a replacement");
+    }
+
+    /**
+     * Checks that a depleted stack is refilled from a stack held in the off-hand
+     */
+    @Test
+    public void refillFromOffHand() {
+        Player player = server.addPlayer();
+        // held single stack that will be depleted
+        ItemStack held = new ItemStack(Material.STONE, 1);
+        player.getInventory().setItem(0, held);
+        held = player.getInventory().getItem(0);
+        assertNotNull(held);
+        // only replacement is a stack held in the off-hand
+        player.getInventory().setItemInOffHand(new ItemStack(Material.STONE, 64));
+        // execute event
+        executeItemUsedEvent(player, held);
+        // check that the held stack was refilled
+        assertFalse(AutoReplaceListener.isNullOrAir(player.getInventory().getItem(0)), "held stack should be refilled from the off-hand stack");
+    }
+
+    /**
+     * Checks that a depleted stack is refilled from a shulker box held in the off-hand
+     */
+    @Test
+    public void refillFromShulkerInOffHand() {
+        Player player = server.addPlayer();
+        // held single stack that will be depleted
+        ItemStack held = new ItemStack(Material.STONE, 1);
+        player.getInventory().setItem(0, held);
+        held = player.getInventory().getItem(0);
+        assertNotNull(held);
+        // only replacement is inside a shulker box held in the off-hand
+        player.getInventory().setItemInOffHand(shulkerContaining(new ItemStack(Material.STONE, 64)));
+        // execute event
+        executeItemUsedEvent(player, held);
+        // check that the held stack was refilled
+        assertFalse(AutoReplaceListener.isNullOrAir(player.getInventory().getItem(0)), "held stack should be refilled from the shulker box in the off-hand");
     }
 
     @Test
@@ -412,6 +476,31 @@ public class AutoReplaceTest {
             }
         }
         return count;
+    }
+
+    /**
+     * builds a shulker box item that contains the given content in its first slot
+     */
+    private ItemStack shulkerContaining(ItemStack content) {
+        ItemStack shulker = new ItemStack(Material.WHITE_SHULKER_BOX);
+        BlockStateMeta bsm = (BlockStateMeta) shulker.getItemMeta();
+        assertNotNull(bsm);
+        ShulkerBox box = (ShulkerBox) bsm.getBlockState();
+        box.getInventory().setItem(0, content);
+        bsm.setBlockState(box);
+        shulker.setItemMeta(bsm);
+        return shulker;
+    }
+
+    /**
+     * calculates the amount of items with the specified material inside a shulker box item
+     */
+    private int amountInShulker(ItemStack shulker, Material material) {
+        assertNotNull(shulker);
+        BlockStateMeta bsm = (BlockStateMeta) shulker.getItemMeta();
+        assertNotNull(bsm);
+        ShulkerBox box = (ShulkerBox) bsm.getBlockState();
+        return amountInInventory(box.getInventory(), material);
     }
 
     /**
