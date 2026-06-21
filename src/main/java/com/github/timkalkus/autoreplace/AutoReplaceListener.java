@@ -5,8 +5,10 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerItemConsumeEvent;
 import org.bukkit.event.player.PlayerItemDamageEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.Damageable;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -20,6 +22,7 @@ public class AutoReplaceListener implements Listener {
 
     private final AutoReplaceMain plugin;
     private static final String privateKey = "AutoReplaceKey";
+    private static final int OFF_HAND_SLOT = 40;
 
     public AutoReplaceListener(AutoReplaceMain plugin) {
         this.plugin = plugin;
@@ -55,6 +58,23 @@ public class AutoReplaceListener implements Listener {
         //Bukkit.broadcastMessage("Hand: " + event.getHand().name() + ", TypeName: " + event.getItem().getType().name() + ", Amount:" + event.getItem().getAmount());
         BukkitRunnable itemDelayEvent = new ItemDelayEvent(event, event.getItem().clone(), getItemSlot(event));
         itemDelayEvent.runTask(plugin);
+    }
+
+    @EventHandler
+    public void itemConsumed(PlayerItemConsumeEvent event) {
+        ItemStack consumed = event.getItem();
+        if (isNullOrAir(consumed))
+            return;
+        if (consumed.getMaxStackSize() == 1)
+            return; // potions, milk and stew leave an empty container behind, don't refill those
+        if (consumed.getAmount() > 1)
+            return; // only refill once the last item of the stack is eaten
+        if (!plugin.getPlayerItemEnabled(event.getPlayer()))
+            return;
+        Player player = event.getPlayer();
+        int handSlot = event.getHand() == EquipmentSlot.OFF_HAND ? OFF_HAND_SLOT : player.getInventory().getHeldItemSlot();
+        BukkitRunnable consumeDelayEvent = new ConsumeDelayEvent(player, consumed.clone(), handSlot);
+        consumeDelayEvent.runTask(plugin);
     }
 
     @EventHandler
@@ -183,6 +203,29 @@ public class AutoReplaceListener implements Listener {
             if (!isNullOrAir(event.getPlayer().getInventory().getItem(handSlot)))
                 return; // item was replaced by other item than air, e.g. bucket was filled with water
             ReplaceHelper rt = new ReplaceHelper(event.getPlayer(), item, handSlot);
+            rt.replace();
+        }
+    }
+
+    private static class ConsumeDelayEvent extends BukkitRunnable {
+
+        private final Player player;
+        private final ItemStack item; // consumed item before depletion
+        private final int handSlot;
+
+        private ConsumeDelayEvent(Player player, ItemStack item, int handSlot) {
+            this.player = player;
+            this.item = item;
+            this.handSlot = handSlot;
+        }
+
+        @Override
+        public void run() {
+            if (handSlot < 0)
+                return;
+            if (!isNullOrAir(player.getInventory().getItem(handSlot)))
+                return; // stack not empty (still has food, or a container like an empty bottle was left)
+            ReplaceHelper rt = new ReplaceHelper(player, item, handSlot);
             rt.replace();
         }
     }

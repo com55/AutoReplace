@@ -12,7 +12,9 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.Event;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerItemConsumeEvent;
 import org.bukkit.event.player.PlayerItemDamageEvent;
+import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.BlockStateMeta;
@@ -312,6 +314,45 @@ public class AutoReplaceTest {
         assertEquals(64, amountInShulker(player.getInventory().getItem(9), Material.STONE), "main inventory shulker should be untouched");
     }
 
+    /**
+     * Checks that eating the last food item refills the hand from the inventory
+     */
+    @Test
+    public void refillFoodAfterEating() {
+        Player player = server.addPlayer();
+        // last food item held in the main hand
+        ItemStack held = new ItemStack(Material.BREAD, 1);
+        player.getInventory().setItem(0, held);
+        player.getInventory().setHeldItemSlot(0);
+        held = player.getInventory().getItem(0);
+        assertNotNull(held);
+        // a replacement stack in the inventory
+        player.getInventory().setItem(9, new ItemStack(Material.BREAD, 64));
+        // execute event
+        executeItemConsumeEvent(player, held, EquipmentSlot.HAND);
+        // the emptied hand should be refilled from the inventory stack
+        assertFalse(AutoReplaceListener.isNullOrAir(player.getInventory().getItem(0)), "food should be refilled after eating the last one");
+    }
+
+    /**
+     * Checks that eating the last food item from the off-hand refills it from the inventory
+     */
+    @Test
+    public void refillFoodAfterEatingOffHand() {
+        Player player = server.addPlayer();
+        // last food item held in the off-hand
+        ItemStack held = new ItemStack(Material.BREAD, 1);
+        player.getInventory().setItemInOffHand(held);
+        held = player.getInventory().getItemInOffHand();
+        assertNotNull(held);
+        // a replacement stack in the inventory
+        player.getInventory().setItem(9, new ItemStack(Material.BREAD, 64));
+        // execute event
+        executeItemConsumeEvent(player, held, EquipmentSlot.OFF_HAND);
+        // the emptied off-hand should be refilled from the inventory stack
+        assertFalse(AutoReplaceListener.isNullOrAir(player.getInventory().getItemInOffHand()), "off-hand food should be refilled after eating the last one");
+    }
+
     @Test
     public void stressTest() {
         int numberOfPlayers = 20;
@@ -473,6 +514,26 @@ public class AutoReplaceTest {
 
     private void executeItemUsedEvent(Player player, ItemStack item) {
         executeItemUsedEvent(player, item, true);
+    }
+
+    /**
+     * Imitates vanilla PlayerItemConsumeEvent behaviour by calling the event and reducing the amount by 1
+     * (turning a depleted stack into air) if the event is not canceled
+     *
+     * @param player initiator of the event
+     * @param item   item being consumed
+     * @param hand   hand the item is consumed from
+     */
+    private void executeItemConsumeEvent(Player player, ItemStack item, EquipmentSlot hand) {
+        assertNotNull(player);
+        assertNotNull(item);
+        PlayerItemConsumeEvent event = new PlayerItemConsumeEvent(player, item, hand);
+        server.getPluginManager().callEvent(event);
+        if (!event.isCancelled()) {
+            item.setAmount(item.getAmount() - 1);
+            item.setType(Material.AIR);
+        }
+        server.getScheduler().performOneTick();
     }
 
     /**
